@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const internalRoutes = require('./routes/internal.route');
 const apiKeyMiddleware = require('./middlewares/apiKey.middleware');
+const pipelineRoutes = require('./routes/pipeline.route');
 
 const app = express();
 app.use(cors());
@@ -15,5 +16,6 @@ app.use('/internal', internalRoutes);
 app.get('/secure-data', apiKeyMiddleware, (req, res) => {
   res.json({ message: 'Access granted', orgId: req.orgId, projectId: req.projectId });
 });
+app.use('/api/pipeline', apiKeyMiddleware, pipelineRoutes);
 
 module.exports = app;

@@ -2,7 +2,7 @@ const { validateApiKey } = require('../services/apiKey.service');
 
 const apiKeyMiddleware = async (req, res, next) => {
   try {
-    const apiKey = req.headers['x-api-key'];
+    const apiKey = req.headers['x-datanadhi-api-key'];
     if (!apiKey) return res.status(400).json({ error: 'API key required' });
 
     const { orgId, projectId } = await validateApiKey(apiKey);
