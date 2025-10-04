@@ -4,9 +4,12 @@ const { SEC_DB } = process.env;
 
 const encryptGlobalController = (req, res) => {
   try {
-    const { value } = req.body;
+    let { value } = req.body;
     if (!value) return res.status(400).json({ error: 'Missing value' });
 
+    if (value instanceof Object) {
+      value = JSON.stringify(value);
+    }
     const encrypted = encryptAesGcm(value, SEC_DB);
     res.json({ encrypted });
   } catch (err) {
