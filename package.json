@@ -16,16 +16,11 @@
     "nodemon": "^3.1.10"
   },
   "dependencies": {
-    "@aws-sdk/client-kinesis": "^3.896.0",
-    "aws-kcl": "^3.0.1",
-    "aws-sdk": "^2.1692.0",
+    "@temporalio/client": "^1.13.1",
     "cors": "^2.8.5",
-    "data-nadhi-queue": "file:../data-nadhi-queue",
     "dotenv": "^16.0.0",
     "express": "^4.18.2",
-    "minio": "^8.0.6",
     "mongodb": "^5.6.0",
-    "pg": "^8.16.3",
     "redis": "^4.6.7"
   }
 }

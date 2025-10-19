@@ -1,5 +1,5 @@
 const { encryptAesGcm, decryptAesGcm } = require('./crypto.service');
-const { getProjectSecret, getOrganisationSecret } = require('./projects.service');
+const { getProjectSecret, getOrganisationSecret } = require('./entities.service');
 const { getApiKey, setApiKey } = require('../dal/cache.dal');
 
 const { SEC_GLOBAL, NONCE_VALUE, API_KEY_CACHE_TTL_SECONDS } = process.env;

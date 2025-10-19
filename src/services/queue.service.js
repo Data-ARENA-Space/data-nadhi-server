@@ -1,51 +1,37 @@
 const {generateMessageId} = require('./crypto.service');
-const { Queue, MinioStorage } = require('data-nadhi-queue');
-const { Pool } = require('pg');
-const {getQueueCredentials} = require('./projects.service');
+const { getProcessorId } = require('./entities.service');
+const { Client, Connection } = require('@temporalio/client');
 
-const getFileStorage = (fileStorage) => {
-    if (fileStorage.type == "minio") {
-        const { host, port, accessKey, secretKey, useSSL } = fileStorage.creds;
-        return new MinioStorage(host, port, accessKey, secretKey, 'data-nadhi-queue', useSSL);
-    }
-    throw new Error(`Unsupported file storage type ${fileStorage.type}`);
-}
+const pushToTemporal = async (workflowId, taskQueue, log_data) => {
+    const connection = await Connection.connect({ 
+      address: 'datanadhi-temporal:7233'
+    });
 
-const getDbPool = (db) => {
-    if (db.type=="pg") {
-        const { host, port, user, password, database } = db.creds;
-        return new Pool({
-            host,
-            port,
-            user,
-            password,
-            database
-        });
-    }
-    throw new Error(`Unsupported database type ${db.type}`);
-}
+    // Create a client using the connection
+    const client = new Client({ 
+      connection
+    });
 
-const getQueue = (queueCreds) => {
-    const minioClient = getFileStorage(queueCreds.fileStorage);
-    const dbPool = getDbPool(queueCreds.database);
-    return new Queue(dbPool, minioClient);
+    client.workflow.start('MainWorkflow', {
+        args: [log_data],
+        taskQueue: taskQueue,
+        workflowId: workflowId,
+    });
 }
 
 const enqueue = async (orgId, projectId, pipelineId, log_data) => {
+    const processorId = await getProcessorId(orgId, projectId, pipelineId);
     const messageId = generateMessageId(pipelineId, log_data.trace_id || 'no-trace');
-    const filePath = [orgId, projectId, pipelineId].join("/");
-    console.log('Generated filePath:', filePath);
-    
-    const queueCreds = await getQueueCredentials(orgId);
-    const queue = getQueue(queueCreds);
-    
-    console.log('About to call queue.publish with:', {
-        messageId,
-        dataSize: JSON.stringify(log_data).length,
-        filePath
-    });
-    
-    await queue.publish(messageId, Buffer.from(JSON.stringify(log_data)), filePath);
+    const workflowId = ["log_process", orgId, projectId, pipelineId, messageId].join("-");
+
+    pushToTemporal(workflowId, 
+      processorId, 
+      { "metadata": {
+        pipeline_id: pipelineId,
+        project_id: projectId,
+        organisation_id: orgId
+      }, log_data});
+
     console.log('Queue publish completed');
 }
 

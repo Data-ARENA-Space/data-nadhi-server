@@ -40,6 +40,16 @@ const getPipeline = async (orgId, projectId, pipelineCode) => {
   return await redis.get(`datanadhiserver:org:${orgId}:prj:${projectId}:plc:${pipelineCode}`);
 }
 
+const getPipelineById = async (orgId, projectId, pipelineId) => {
+  if (!redis || !redis.connected) return null;
+  return await redis.get(`datanadhiserver:org:${orgId}:prj:${projectId}:pl:${pipelineId}`);
+}
+
+const setPipelineById = async (orgId, projectId, pipelineId, data, ttl = 1800) => {
+  if (!redis || !redis.connected) return;
+  await redis.set(`datanadhiserver:org:${orgId}:prj:${projectId}:pl:${pipelineId}`, data, ttl);
+}
+
 const setPipeline = async (orgId, projectId, pipelineCode, data, ttl = 1800) => {
   if (!redis || !redis.connected) return;
   await redis.set(`datanadhiserver:org:${orgId}:prj:${projectId}:plc:${pipelineCode}`, data, ttl);
@@ -70,36 +80,6 @@ const setProjectSecret = async (orgId, projectId, secret, ttl = 3600) => {
   await redis.set(`datanadhiserver:org:${orgId}:prj:${projectId}:secret`, secret, ttl);
 }
 
-const getProcessor = async (processorId) => {
-  if (!redis || !redis.connected) return null;
-  return await redis.get(`datanadhiserver:processor:${processorId}`);
-}
-
-const setProcessor = async (processorId, data, ttl = 1800) => {
-  if (!redis || !redis.connected) return;
-  await redis.set(`datanadhiserver:processor:${processorId}`, data, ttl);
-}
-
-const getQueue = async (queueId) => {
-  if (!redis || !redis.connected) return null;
-  return await redis.get(`datanadhiserver:queue:${queueId}`);
-}
-
-const setQueue = async (queueId, data, ttl = 1800) => {
-  if (!redis || !redis.connected) return;
-  await redis.set(`datanadhiserver:queue:${queueId}`, data, ttl);
-}
-
-const getQueueCreds = async (orgId) => {
-  if (!redis || !redis.connected) return null;
-  return await redis.get(`datanadhiserver:org:${orgId}:queuecreds`);
-}
-
-const setQueueCreds = async (orgId, data, ttl = 1800) => {
-  if (!redis || !redis.connected) return;
-  await redis.set(`datanadhiserver:org:${orgId}:queuecreds`, data, ttl);
-}
-
 module.exports = {
   setRedisService,
   getApiKey,
@@ -115,10 +95,6 @@ module.exports = {
   getProjectSecret,
   setProjectSecret,
   deleteKey,
-  getProcessor,
-  setProcessor,
-  getQueue,
-  setQueue,
-  getQueueCreds,
-  setQueueCreds
+  getPipelineById,
+  setPipelineById
 };

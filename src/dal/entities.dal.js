@@ -6,6 +6,11 @@ const getPipeline = (orgId, projectId, pipelineCode) => {
   return db.collection('Pipelines').findOne({ pipelineCode: pipelineCode, projectId, organisationId: orgId });
 }
 
+const getPipelineById = (orgId, projectId, pipelineId) => {
+  const db = mongoService.db();
+  return db.collection('Pipelines').findOne({ pipelineId, projectId, organisationId: orgId });
+}
+
 const getProject = (orgId, projectId) => {
   const db = mongoService.db();
   return db.collection('Projects').findOne({ projectId, organisationId: orgId });
@@ -16,14 +21,5 @@ const getOrganisation = (orgId) => {
   return db.collection('Organisations').findOne({ organisationId: orgId });
 }
 
-const getProcessor = (processorId) => {
-  const db = mongoService.db();
-  return db.collection('Processors').findOne({ processorId });
-}
 
-const getQueue = (queueId) => {
-  const db = mongoService.db();
-  return db.collection('Queues').findOne({ queueId });
-}
-
-module.exports = { getProject, getOrganisation, getPipeline, getProcessor, getQueue, mongoService };
+module.exports = { getProject, getOrganisation, getPipeline, getPipelineById, mongoService };

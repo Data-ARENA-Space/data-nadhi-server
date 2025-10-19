@@ -1,4 +1,4 @@
-const { getPipelineByCode } = require('../services/projects.service');
+const { getPipelineByCode } = require('../services/entities.service');
 const { enqueue } = require('../services/queue.service');
 
 const triggerPipeline = async (req, res) => {
