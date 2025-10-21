@@ -27,10 +27,9 @@ const enqueue = async (orgId, projectId, pipelineId, log_data) => {
     pushToTemporal(workflowId, 
       processorId, 
       { "metadata": {
-        pipeline_id: pipelineId,
-        project_id: projectId,
-        organisation_id: orgId,
-        start_node_id: "11111111-1111-1111-1111-111111111111"
+        pipelineId,
+        projectId,
+        organisationId: orgId
       }, log_data});
 
     console.log('Queue publish completed');

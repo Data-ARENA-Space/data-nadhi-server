@@ -11,23 +11,24 @@ class RedisService {
       return RedisService.instance;
     }
 
-    if (!url) {
-      this.client = null;
-      this.connected = false;
-      return;
+    this.url = url || null;
+    this.client = null;
+    this.connected = false;
+    this._reconnecting = false;
+
+    if (this.url) {
+      this._initClient();
     }
 
+    RedisService.instance = this;
+  }
+
+  _initClient() {
     this.client = createClient({ 
-      url,
+      url: this.url,
       socket: {
-        reconnectStrategy: (retries) => {
-          const delay = Math.min(retries * 50, 5000); // Max 5s delay
-          // Only log after several failed attempts to reduce noise
-          if (retries > 3) {
-            logger.warn(`Redis reconnecting in ${delay}ms (attempt ${retries})`);
-          }
-          return delay;
-        }
+        // Disable automatic reconnect retries for Redis (cache is optional)
+        reconnectStrategy: () => new Error('Redis reconnect disabled')
       }
     });
     this.connected = false;
@@ -36,6 +37,10 @@ class RedisService {
     this.client.on('error', (err) => {
       logger.error('Redis connection error:', { error: err.message });
       this.connected = false;
+      // Single reconnection attempt, then leave caching disabled if it fails
+      if (!this._reconnecting) {
+        void this.tryReconnect(1);
+      }
     });
 
     this.client.on('ready', () => {
@@ -46,100 +51,124 @@ class RedisService {
       this.connected = true;
     });
 
-    this.client.on('reconnecting', () => {
-      logger.warn('Redis reconnecting...');
-      this.connected = false;
-    });
-
     this.client.on('end', () => {
       logger.warn('Redis connection ended');
       this.connected = false;
-    });
-
-    RedisService.instance = this;
-  }
-
-  async connect(maxRetries = 5) {
-    if (!this.client) return;
-    await this.connectWithRetry(maxRetries);
-  }
-
-  async connectWithRetry(maxRetries) {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        await this.client.connect();
-        this.connected = true;
-        logger.info('Connected to Redis');
-        return;
-      } catch (err) {
-        const delay = Math.min(Math.pow(2, attempt) * 1000, 30000); // Max 30s delay
-        logger.error(`Redis connection attempt ${attempt}/${maxRetries} failed:`, { error: err.message });
-        
-        if (attempt === maxRetries) {
-          logger.error('All Redis connection attempts failed');
-          this.client = null;
-          this.connected = false;
-          throw new Error(`Failed to connect to Redis after ${maxRetries} attempts: ${err.message}`);
-        }
-        
-        logger.info(`Retrying Redis connection in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+      if (!this._reconnecting) {
+        void this.tryReconnect(1);
       }
+    });
+  }
+
+  async tryReconnect(maxAttempts = 1, delayMs = 1000) {
+    if (!this.url) return false;
+    if (this._reconnecting) return false;
+    this._reconnecting = true;
+    try {
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          this._initClient();
+          await this.client.connect();
+          this.connected = true;
+          logger.info('Redis reconnected');
+          return true;
+        } catch (err) {
+          this.connected = false;
+          this.client = null;
+          if (attempt === maxAttempts) {
+            logger.warn('Redis reconnection failed, leaving caching disabled', { error: err.message });
+            return false;
+          }
+          await new Promise((r) => setTimeout(r, delayMs));
+        }
+      }
+      return false;
+    } finally {
+      this._reconnecting = false;
+    }
+  }
+
+  async connect() {
+    if (!this.client && this.url) this._initClient();
+    if (!this.client) return;
+    try {
+      await this.client.connect();
+      this.connected = true;
+      logger.info('Connected to Redis');
+    } catch (err) {
+      // Do not retry Redis - proceed without cache
+      logger.warn('Redis connect failed, proceeding without cache', { error: err.message });
+      this.client = null;
+      this.connected = false;
     }
   }
 
   async set(key, value, ttlSeconds = null) {
-    return await this.withRetry(async () => {
-      if (!this.client) throw new Error('Redis client not available');
+    if (!this.client) return;
+    try {
       const val = typeof value === 'string' ? value : JSON.stringify(value);
       if (ttlSeconds) await this.client.setEx(key, ttlSeconds, val);
       else await this.client.set(key, val);
-    });
+    } catch (err) {
+      logger.warn('Redis set failed', { error: err.message });
+    }
   }
 
   async get(key) {
-    return await this.withRetry(async () => {
-      if (!this.client) return null;
+    if (!this.client) return null;
+    try {
       const val = await this.client.get(key);
       if (!val) return null;
       try { return JSON.parse(val); } catch { return val; }
-    });
+    } catch (err) {
+      logger.warn('Redis get failed', { error: err.message });
+      return null;
+    }
+  }
+
+  // Safe, silent cache operations (preferred for cache usage)
+  async safe_get(key) {
+    if (!this.client || !this.connected) {
+      await this.tryReconnect(1);
+    }
+    if (!this.client || !this.connected) return null;
+    try { await this.client.ping(); } catch (_e) { await this.tryReconnect(1); }
+    if (!this.client || !this.connected) return null;
+    try {
+      const val = await this.client.get(key);
+      if (!val) return null;
+      try { return JSON.parse(val); } catch { return val; }
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  async safe_set(key, value, ttlSeconds = null) {
+    if (!this.client || !this.connected) {
+      await this.tryReconnect(1);
+    }
+    if (!this.client || !this.connected) return;
+    try { await this.client.ping(); } catch (_e) { await this.tryReconnect(1); }
+    if (!this.client || !this.connected) return;
+    try {
+      const val = typeof value === 'string' ? value : JSON.stringify(value);
+      if (ttlSeconds) await this.client.setEx(key, ttlSeconds, val);
+      else await this.client.set(key, val);
+    } catch (_err) {
+      // fail silently
+    }
   }
 
   async del(key) {
-    return await this.withRetry(async () => {
-      if (!this.client) return;
+    if (!this.client) return;
+    try {
       await this.client.del(key);
-    });
-  }
-
-  // Wrapper for Redis operations with retry logic
-  async withRetry(operation, maxRetries = 3) {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        return await operation();
-      } catch (err) {
-        // Check if it's a connection-related error
-        const isConnectionError = err.code === 'ECONNREFUSED' ||
-                                 err.code === 'ETIMEDOUT' ||
-                                 err.message.includes('connection') ||
-                                 err.message.includes('Socket closed unexpectedly') ||
-                                 !this.connected;
-        
-        if (!isConnectionError || attempt === maxRetries) {
-          // For non-connection errors or final attempt, return null for gets, throw for others
-          if (err.message.includes('Redis client not available') && attempt === maxRetries) {
-            return null; // Gracefully handle unavailable Redis for cache operations
-          }
-          throw err;
-        }
-        
-        const delay = Math.min(Math.pow(2, attempt) * 500, 5000); // Max 5s delay
-        logger.warn(`Redis operation failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, { error: err.message });
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
+    } catch (err) {
+      logger.warn('Redis del failed', { error: err.message });
     }
   }
+
+  // No operation-level retries for Redis: cache should not block or retry
 
   async disconnect() {
     if (!this.client || !this.connected) return;
