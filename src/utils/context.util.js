@@ -36,13 +36,12 @@ function getLogger() {
     als.enterWith(s);
   }
   if (s.logger) return s.logger;
-  const baseMeta = {
-    organisationId: s.organisationId ?? null,
-    projectId: s.projectId ?? null,
-    pipelineId: s.pipelineId ?? null,
-    traceId: s.traceId ?? null,
-    logData: s.logData ?? null,
-  };
+  const baseMeta = {};
+  if (s.organisationId != null) baseMeta.organisationId = s.organisationId;
+  if (s.projectId != null) baseMeta.projectId = s.projectId;
+  if (s.pipelineId != null) baseMeta.pipelineId = s.pipelineId;
+  if (s.messageId != null) baseMeta.messageId = s.messageId;
+  if (s.logData != null) baseMeta.logData = s.logData;
   s.logger = new Logger({ baseMeta });
   return s.logger;
 }

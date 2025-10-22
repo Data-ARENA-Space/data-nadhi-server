@@ -1,7 +1,7 @@
-const {generateMessageId} = require('./crypto.service');
 const { getProcessorId } = require('./entities.service');
-const { Client, Connection } = require('@temporalio/client');
+const { Client, Connection, ValueError } = require('@temporalio/client');
 const { getLogger } = require('../utils/context.util');
+const minioService = require('./minio.service');
 
 const pushToTemporal = async (workflowId, taskQueue, input) => {
     const connection = await Connection.connect({ 
@@ -17,37 +17,73 @@ const pushToTemporal = async (workflowId, taskQueue, input) => {
     });
 }
 
-const enqueue = async (orgId, projectId, pipelineId, log_data, { logger } = {}) => {
+const enqueue = async (orgId, projectId, pipelineId, messageId, log_data, { logger } = {}) => {
     const lg = logger || getLogger();
-    const processorId = await getProcessorId(orgId, projectId, pipelineId);
-    const messageId = generateMessageId(pipelineId, log_data.trace_id || log_data.traceId || 'no-trace');
-    const workflowId = ["log_process", orgId, projectId, pipelineId, messageId].join("-");
+    
+    try {
+        const processorId = await getProcessorId(orgId, projectId, pipelineId);
+        const workflowId = ["log_process", orgId, projectId, pipelineId, messageId].join("-");
 
-    // await pushToTemporal(
-    //   workflowId,
-    //   processorId,
-    //   {
-    //     metadata: {
-    //       pipelineId,
-    //       projectId,
-    //       organisationId: orgId
-    //     },
-    //     log_data
-    //   }
-    // );
+        // Add messageId to log_data for propagation to Temporal worker
+        log_data = { ...log_data, messageId };
 
-    lg.info(
-      'Queue publish completed',
-      { workflowId, taskQueue: processorId },
-      {
-        organisationId: orgId,
-        projectId,
-        pipelineId,
-        traceId: (log_data && (log_data.traceId || log_data.trace_id)) || null,
-        logData: log_data,
-      }
-    );
-    return workflowId;
+        metadata = {
+            pipelineId,
+            projectId,
+            organisationId: orgId,
+            messageId,
+        }
+
+        await pushToTemporal( workflowId, processorId, { metadata, log_data } );
+
+        lg.info(
+          'Queue publish completed',
+          { workflowId, messageId, taskQueue: processorId },
+          {
+            organisationId: orgId,
+            projectId,
+            pipelineId,
+            messageId,
+            logData: log_data,
+          }
+        );
+        return { workflowId, messageId };
+    } catch (err) {
+        // Build failure data
+        const failureData = {
+            timestamp: new Date().toISOString(),
+            organisationId: orgId,
+            projectId: projectId,
+            pipelineId: pipelineId,
+            messageId: messageId,
+            originalInput: log_data,
+            currentInput: null,
+            error: {
+                message: err.message,
+                type: err.name || 'Error',
+                stack: err.stack,
+                description: 'Failed to enqueue message to Temporal'
+            }
+        };
+
+        // Upload to MinIO
+        if (orgId && projectId && pipelineId && messageId) {
+            try {
+                const objectPath = `${orgId}/${projectId}/${pipelineId}/${messageId}/enqueue.json`;
+                const success = await minioService.uploadJson(objectPath, failureData);
+                
+                if (success) {
+                    lg.error('Enqueue failed - Logged to MinIO', { error: err.message, messageId, minio_path: objectPath });
+                } else {
+                    lg.error('Enqueue failed - Failed to log to MinIO', { error: err.message, messageId });
+                }
+            } catch (minioErr) {
+                lg.error('Enqueue failed - MinIO logging error', { error: err.message, messageId, minio_error: minioErr.message });
+            }
+        } else {
+            lg.error('Enqueue failed - Missing required IDs for MinIO logging', { error: err.message, messageId });
+        }
+    }
 }
 
 module.exports = { enqueue };

@@ -1,4 +1,4 @@
-const { encryptAesGcm, decryptAesGcm } = require('./crypto.service');
+const { decryptAesGcm } = require('./crypto.service');
 
 const entitiesDal = require('../dal/entities.dal');
 const cacheDal = require('../dal/cache.dal');

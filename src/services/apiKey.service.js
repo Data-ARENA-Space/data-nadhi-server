@@ -19,7 +19,10 @@ const createApiKey = async (orgId, projectId) => {
 const validateApiKey = async (apiKey) => {
   // Check cache first
   const cached = await getApiKey(apiKey);
-  if (cached) return cached;
+  if (cached) {
+    if (cached.failure) throw new Error("Getting Wrong API Key again")
+    return cached;
+  }
 
   let enc3 = Buffer.from(apiKey, 'base64').toString('utf8');
   const layer2 = decryptAesGcm(enc3, SEC_GLOBAL);
@@ -37,7 +40,10 @@ const validateApiKey = async (apiKey) => {
   let projectSecret = await getProjectSecret(orgId, projectId);
 
   const nonce = decryptAesGcm(enc1, projectSecret);
-  if (nonce !== NONCE_VALUE) throw new Error('Nonce mismatch');
+  if (nonce !== NONCE_VALUE) {
+    setApiKey(apiKey, {failure: true}, API_KEY_CACHE_TTL_SECONDS/2);
+    throw new Error('Nonce mismatch');
+  }
 
   const result = { orgId, projectId };
   setApiKey(apiKey, result, API_KEY_CACHE_TTL_SECONDS);
