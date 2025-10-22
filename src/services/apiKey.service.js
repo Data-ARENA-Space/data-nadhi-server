@@ -1,6 +1,7 @@
 const { encryptAesGcm, decryptAesGcm } = require('./crypto.service');
 const { getProjectSecret, getOrganisationSecret } = require('./entities.service');
 const { getApiKey, setApiKey } = require('../dal/cache.dal');
+const context = require('../utils/context.util');
 
 const { SEC_GLOBAL, NONCE_VALUE, API_KEY_CACHE_TTL_SECONDS } = process.env;
 
@@ -24,10 +25,14 @@ const validateApiKey = async (apiKey) => {
   const layer2 = decryptAesGcm(enc3, SEC_GLOBAL);
   const [enc2, orgId] = layer2.split('|');
 
+  context.set({organisationId: orgId})
+
   let orgSecret = await getOrganisationSecret(orgId);
 
   const layer1 = decryptAesGcm(enc2, orgSecret);
   const [enc1, projectId] = layer1.split('|');
+
+  context.set({projectId})
 
   let projectSecret = await getProjectSecret(orgId, projectId);
 

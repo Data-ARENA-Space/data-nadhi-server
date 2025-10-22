@@ -1,38 +1,53 @@
 const {generateMessageId} = require('./crypto.service');
 const { getProcessorId } = require('./entities.service');
 const { Client, Connection } = require('@temporalio/client');
+const { getLogger } = require('../utils/context.util');
 
-const pushToTemporal = async (workflowId, taskQueue, log_data) => {
+const pushToTemporal = async (workflowId, taskQueue, input) => {
     const connection = await Connection.connect({ 
       address: 'datanadhi-temporal:7233'
     });
 
-    // Create a client using the connection
-    const client = new Client({ 
-      connection
-    });
+    const client = new Client({ connection });
 
-    client.workflow.start('MainWorkflow', {
-        args: [log_data],
+    await client.workflow.start('MainWorkflow', {
+        args: [input],
         taskQueue: taskQueue,
         workflowId: workflowId,
     });
 }
 
-const enqueue = async (orgId, projectId, pipelineId, log_data) => {
+const enqueue = async (orgId, projectId, pipelineId, log_data, { logger } = {}) => {
+    const lg = logger || getLogger();
     const processorId = await getProcessorId(orgId, projectId, pipelineId);
-    const messageId = generateMessageId(pipelineId, log_data.trace_id || 'no-trace');
+    const messageId = generateMessageId(pipelineId, log_data.trace_id || log_data.traceId || 'no-trace');
     const workflowId = ["log_process", orgId, projectId, pipelineId, messageId].join("-");
 
-    pushToTemporal(workflowId, 
-      processorId, 
-      { "metadata": {
-        pipelineId,
-        projectId,
-        organisationId: orgId
-      }, log_data});
+    // await pushToTemporal(
+    //   workflowId,
+    //   processorId,
+    //   {
+    //     metadata: {
+    //       pipelineId,
+    //       projectId,
+    //       organisationId: orgId
+    //     },
+    //     log_data
+    //   }
+    // );
 
-    console.log('Queue publish completed');
+    lg.info(
+      'Queue publish completed',
+      { workflowId, taskQueue: processorId },
+      {
+        organisationId: orgId,
+        projectId,
+        pipelineId,
+        traceId: (log_data && (log_data.traceId || log_data.trace_id)) || null,
+        logData: log_data,
+      }
+    );
+    return workflowId;
 }
 
 module.exports = { enqueue };

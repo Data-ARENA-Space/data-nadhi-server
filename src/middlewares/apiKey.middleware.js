@@ -1,16 +1,22 @@
 const { validateApiKey } = require('../services/apiKey.service');
+const context = require('../utils/context.util');
+const { UnauthorizedError } = require('../utils/error.util');
 
-const apiKeyMiddleware = async (req, res, next) => {
+const apiKeyMiddleware = async (req, _res, next) => {
+  const apiKey = req.headers['x-datanadhi-api-key'];
+  if (!apiKey) return next(new UnauthorizedError('API key required'));
   try {
-    const apiKey = req.headers['x-datanadhi-api-key'];
-    if (!apiKey) return res.status(400).json({ error: 'API key required' });
-
     const { orgId, projectId } = await validateApiKey(apiKey);
     req.orgId = orgId;
     req.projectId = projectId;
+
+    // context.set({ organisationId: orgId, projectId });
+    req.logger = context.getLogger();
+    req.logger.debug('API key validated');
+
     next();
   } catch (err) {
-    res.status(401).json({ error: err.message });
+    next(new UnauthorizedError(err.message));
   }
 }
 
