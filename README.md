@@ -1,29 +1,43 @@
-# data-nadhi-server
+# Data Nadhi Server
 
-## Dev Container Setup
+Main API server for Data Nadhi that handles pipeline management and API requests.
 
-This project is designed to run inside a VS Code dev container.
+## Description
 
-### Port Forwarding
-The server port is configured via the `.env` file (default: `PORT=5000`).
-Make sure your `.devcontainer/devcontainer.json` has:
+This server provides REST API endpoints for managing data pipelines, connects to MongoDB for data storage, and uses Redis for caching pipeline configurations and secrets.
 
-```json
-"forwardPorts": [5000]
+## Dev Container
+
+This repository includes a dev container configuration with all required dependencies and services pre-configured.
+
+**To use:**
+1. Open the repository in VS Code
+2. Click "Reopen in Container" when prompted
+3. All services (MongoDB, Redis) will be available automatically
+
+## Running the Server
+
+```bash
+npm run dev
 ```
 
-If you change the port in `.env`, update `forwardPorts` accordingly.
+The server will start on the port specified in your environment variables (default: 5000).
 
-### Server Binding
-The server should bind to `0.0.0.0` to be accessible from outside the container.
+## Environment Variables
 
-### Accessing from Another Dev Container
-If using Docker Compose or a custom network, use the service/container name as the hostname (e.g., `http://data-nadhi-server:5000`).
+Copy `.env.example` to `.env` and configure:
 
-### Common Issues
-- **403 Forbidden**: Ensure you are using the correct HTTP method and endpoint. Some routes only accept POST requests.
-- **Cannot POST /route**: Double-check the route and method. Restart the server after changes.
-- **remote origin already exists**: Your Git remote is already set. Use `git remote -v` to check, or `git remote set-url origin <url>` to update.
+```env
+PORT=5000
+MONGO_URL=mongodb://mongo:27017/datanadhi_dev
+REDIS_URL=redis://redis:6379
+SEC_DB=my-secret-db-key
+SEC_GLOBAL=my-global-root-key
+NONCE_VALUE=DataNadhi
+API_KEY_CACHE_TTL_SECONDS=300
+SECRET_CACHE_TTL_SECONDS=3600
+```
 
----
-For more details, see the code and comments in the repository.
+## License
+
+This project is licensed under the ISC License - see the [LICENSE](LICENSE) file for details.
